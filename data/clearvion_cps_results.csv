@@ -1,0 +1,22 @@
+Topic,Feature_Label,Review_Count,Frequency_Score,Sentiment_Score,Relevance_Score,CPS
+0,"asana, tasks, project, task, projects",213,0.289,0.887,1.0,0.718
+1,"jira, tracking, project, teams, workflows",212,0.287,0.844,0.995,0.702
+8,"trello, visual, board, like, easy",17,0.023,1.0,0.08,0.364
+10,"trello, good, tasks, team, understand",10,0.014,1.0,0.047,0.35
+12,"trello, interface, simple, team, organized",9,0.012,1.0,0.042,0.348
+7,"trello, like trello, easy, use, like",18,0.024,0.944,0.085,0.348
+13,"trello, easy, cards, easy use, things",8,0.011,1.0,0.038,0.346
+14,"digital, professional, trello, business, work",7,0.009,1.0,0.033,0.344
+4,"trello, tasks, cards, use, work",29,0.039,0.862,0.136,0.342
+20,"trello, tasks, order, turns, organize",5,0.007,1.0,0.023,0.34
+2,"day, easy, use, tracking, tasks",35,0.047,0.8,0.164,0.334
+3,"project, project management, management, projects, team",30,0.041,0.767,0.141,0.313
+15,"trello, management, easy, need complex, simple",7,0.009,0.857,0.033,0.297
+19,"trello, post, card, works, cards",5,0.007,0.8,0.023,0.274
+9,"kanban, kanban board, team, board, free",11,0.015,0.727,0.052,0.262
+6,"boards, understand, good, simple, tasks",18,0.024,0.611,0.085,0.238
+5,"trello, project, boards, management, cards",18,0.024,0.611,0.085,0.238
+11,"projects, boards, love, tasks, board",9,0.012,0.667,0.042,0.238
+17,"card, dates, card feature, cards, leads",6,0.008,0.667,0.028,0.232
+18,"helps, helps track, work team, tracking, hard understand",5,0.007,0.6,0.023,0.208
+16,"ticket, ticket tracking, overview, enhancement, tickets",6,0.008,0.333,0.028,0.122
