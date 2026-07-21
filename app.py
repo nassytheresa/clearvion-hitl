@@ -99,7 +99,7 @@ if not st.session_state.participant_id.strip():
     st.sidebar.warning("Please enter your name or ID above before starting.")
 
 st.sidebar.markdown("---")
-with st.sidebar.expander("Advanced (optional) — explore scoring weights"):
+with st.sidebar.expander("Advanced (optional): explore scoring weights"):
     st.caption(
         "Not part of the task. Shows how the ranking would change under "
         "different weightings. Safe to ignore."
@@ -110,7 +110,7 @@ with st.sidebar.expander("Advanced (optional) — explore scoring weights"):
 
 ranked_df = recompute_cps(cps_df, w_freq, w_sent, w_rel)
 
-with st.sidebar.expander("Advanced (optional) — filter evidence by product"):
+with st.sidebar.expander("Advanced (optional): filter evidence by product"):
     product_filter = st.multiselect(
         "Product",
         options=sorted(reviews_df["productName"].dropna().unique().tolist()),
@@ -126,18 +126,18 @@ with st.container(border=True):
     st.markdown(
         "**What this study is about:** Clearvion is a research tool built for "
         "a Master's thesis. It reads customer reviews for three project "
-        "management tools — **Jira, Asana, and Trello** — and tries to work "
+        "management tools, **Jira, Asana, and Trello**, and tries to work "
         "out which product features customers care about most, so a product "
         "team could use it to help decide what to prioritise next."
     )
     st.markdown(
         "**How it works, in short:** the tool takes 738 real customer "
         "reviews from G2 (a review site), and uses natural language "
-        "processing to (1) group similar feedback into 21 topics — things "
-        "like \"Kanban boards\" or \"Trello's ease of use\" — (2) work out "
-        "whether customers feel positively or negatively about each topic, "
-        "and (3) combine that into a single priority score for each one. "
-        "You'll see all 21 topics, one at a time."
+        "processing to do three things. First, it groups similar feedback "
+        "into 21 topics, things like \"Kanban boards\" or \"Trello's ease of "
+        "use.\" Second, it works out whether customers feel positively or "
+        "negatively about each topic. Third, it combines that into a single "
+        "priority score for each one. You'll see all 21 topics, one at a time."
     )
     st.markdown(
         "**Why we need you:** an algorithm can spot patterns in review text, "
@@ -148,24 +148,24 @@ with st.container(border=True):
     )
     st.markdown(
         "**What you'll do (about 15 minutes):**\n"
-        "1. Go through 21 features one at a time, and say yes/no on whether "
-        "each ranking looks right to you.\n"
-        "2. Answer a short survey about how easy *this tool* was to use — "
-        "not about the product features themselves.\n"
+        "1. Go through 21 features one at a time, and say yes or no on "
+        "whether each ranking looks right to you.\n"
+        "2. Answer a short survey about how easy this tool was to use. "
+        "This part is about the tool, not the product features themselves.\n"
         "3. Download one results file and send it back."
     )
     with st.expander("Curious about the details? What is a 'CPS score'?"):
         st.markdown(
             "**CPS stands for Customer Priority Score.** It's a single number "
             "from **0 to 1** calculated for each of the 21 topics, meant "
-            "to estimate how much attention that topic deserves. Higher = "
-            "higher priority.\n\n"
+            "to estimate how much attention that topic deserves. A higher "
+            "number means higher priority.\n\n"
             "It's built from three ingredients, each also scored 0 to 1:\n"
-            "- **Frequency** — how often customers mention this in reviews\n"
-            "- **Sentiment** — how positively or negatively they talk about it\n"
-            "- **Relevance** — how central this topic is within its reviews\n\n"
-            "Right now these three are weighted equally. **Your job isn't to "
-            "check the maths** — it's to use your own product judgement and "
+            "- **Frequency**: how often customers mention this in reviews\n"
+            "- **Sentiment**: how positively or negatively they talk about it\n"
+            "- **Relevance**: how central this topic is within its reviews\n\n"
+            "Right now these three are weighted equally. Your job isn't to "
+            "check the maths. It's to use your own product judgement and "
             "say whether the resulting rank feels right, based on the "
             "evidence you're shown."
         )
@@ -214,9 +214,9 @@ with tab1:
     with col1:
         friendly_name = TOPIC_FRIENDLY_NAMES.get(int(topic_id), feature_choice)
         with st.container(border=True):
-            st.markdown(f"#### #{int(row['System Rank'])} — {friendly_name}")
+            st.markdown(f"#### #{int(row['System Rank'])}: {friendly_name}")
             st.caption(
-                f"Raw model keywords: *{feature_choice}* — these are the words "
+                f"Raw model keywords: *{feature_choice}*. These are the words "
                 f"the topic-modelling algorithm found most common in this group "
                 f"of reviews; the name above is a plain-language summary of them."
             )
@@ -227,7 +227,7 @@ with tab1:
             st.caption(
                 f"Made up of: Frequency {row['Frequency_Score']:.2f}, "
                 f"Sentiment {row['Sentiment_Score']:.2f}, "
-                f"Relevance {row['Relevance_Score']:.2f} — each also out of 1.00"
+                f"Relevance {row['Relevance_Score']:.2f}. Each is also out of 1.00"
             )
             st.write(f"Based on **{int(row['Review_Count'])} reviews**")
 
@@ -331,14 +331,14 @@ with tab2:
     st.markdown(
         "These questions are about **your experience using this tool**, not "
         "about whether you agreed with the feature rankings. There are no "
-        "right or wrong answers here — this is just to check whether the "
+        "right or wrong answers here. This is just to check whether the "
         "tool itself is clear and easy to use for a product manager."
     )
     st.info(
         "For each statement below, pick how much you agree, from "
         "**1 (strongly disagree)** to **5 (strongly agree)**. This is a "
         "standard, widely-used usability questionnaire called the SUS "
-        "(System Usability Scale) — you don't need to know that to answer it, "
+        "(System Usability Scale). You don't need to know that to answer it, "
         "just go with your gut reaction."
     )
 
@@ -413,7 +413,7 @@ with tab3:
     st.markdown(
         "This will package your rankings, comments, and survey answers into "
         "a single file. Please download it and send it back to the "
-        "researcher — nothing is uploaded automatically."
+        "researcher. Nothing is uploaded automatically."
     )
 
     sus_score = compute_sus_score(st.session_state.sus_answers)
@@ -427,7 +427,7 @@ with tab3:
         else:
             st.caption(
                 "For context: 68 is considered an average, acceptable score for "
-                "this kind of questionnaire. Your score is below that — which is "
+                "this kind of questionnaire. Your score is below that, which is "
                 "useful feedback, not a problem with your answers."
             )
     else:
