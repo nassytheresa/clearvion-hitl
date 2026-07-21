@@ -16,6 +16,33 @@ st.set_page_config(page_title="Clearvion", layout="wide", page_icon="🎯")
 
 DATA_DIR = "data"
 
+# Human-readable names for each BERTopic topic, written from its top keywords.
+# The raw keyword string (Feature_Label in the CSV) is still shown alongside
+# these for transparency, but this is what participants see as the headline.
+TOPIC_FRIENDLY_NAMES = {
+    0: "Asana: Core Task & Project Management",
+    1: "Jira: Issue Tracking & Team Workflows",
+    2: "Day-to-Day Ease of Use for Task Tracking",
+    3: "General Project Management Capability",
+    4: "Trello: Task & Card Usability",
+    5: "Trello: Board-Based Project Management",
+    6: "Simplicity & Understandability of Boards",
+    7: "Trello: Overall Ease of Use",
+    8: "Trello: Visual Board Layout",
+    9: "Kanban Board Functionality",
+    10: "Trello: Team Task Clarity",
+    11: "Positive Sentiment on Boards & Projects",
+    12: "Trello: Simple, Organized Interface",
+    13: "Trello: Card-Based Ease of Use",
+    14: "Trello for Professional / Business Use",
+    15: "Trello: Simplicity vs. Complex Needs",
+    16: "Ticket Tracking & Enhancement Requests",
+    17: "Card Due Dates & Lead Tracking",
+    18: "Team Tracking Help (Mixed Clarity)",
+    19: "Trello: Posting & Card Functionality",
+    20: "Trello: Task Ordering & Organization",
+}
+
 
 # ----------------------------- Data loading -----------------------------
 
@@ -72,39 +99,35 @@ if not st.session_state.participant_id.strip():
     st.sidebar.warning("Please enter your name or ID above before starting.")
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("Optional: explore scoring weights")
-st.sidebar.caption(
-    "This is not part of the task. It's just here so you can see how the "
-    "ranking would change under different weightings. Feel free to ignore "
-    "it and leave the sliders as they are."
-)
-w_freq = st.sidebar.slider("Frequency weight", 0.0, 1.0, 0.33, 0.01)
-w_sent = st.sidebar.slider("Sentiment weight", 0.0, 1.0, 0.33, 0.01)
-w_rel = st.sidebar.slider("Relevance weight", 0.0, 1.0, 0.34, 0.01)
+with st.sidebar.expander("Advanced (optional) — explore scoring weights"):
+    st.caption(
+        "Not part of the task. Shows how the ranking would change under "
+        "different weightings. Safe to ignore."
+    )
+    w_freq = st.slider("Frequency weight", 0.0, 1.0, 0.33, 0.01)
+    w_sent = st.slider("Sentiment weight", 0.0, 1.0, 0.33, 0.01)
+    w_rel = st.slider("Relevance weight", 0.0, 1.0, 0.34, 0.01)
 
 ranked_df = recompute_cps(cps_df, w_freq, w_sent, w_rel)
 
-st.sidebar.markdown("---")
-product_filter = st.sidebar.multiselect(
-    "Filter evidence by product",
-    options=sorted(reviews_df["productName"].dropna().unique().tolist()),
-    default=sorted(reviews_df["productName"].dropna().unique().tolist()),
-)
+with st.sidebar.expander("Advanced (optional) — filter evidence by product"):
+    product_filter = st.multiselect(
+        "Product",
+        options=sorted(reviews_df["productName"].dropna().unique().tolist()),
+        default=sorted(reviews_df["productName"].dropna().unique().tolist()),
+        label_visibility="collapsed",
+    )
 
 
 # ----------------------------- Welcome panel -----------------------------
 
 with st.container(border=True):
-    st.markdown("### 👋 Welcome — here's what you'll do (about 15–20 minutes)")
+    st.markdown("### 👋 Welcome — this takes about 15 minutes")
     st.markdown(
-        "1. **Review rankings** — a system has ranked 21 product features based on "
-        "customer reviews. Look at each one, see the evidence behind it, and set "
-        "your own rank if you'd rank it differently.\n"
-        "2. **Quick survey** — 10 short usability questions plus 3 open ones.\n"
-        "3. **Download & send back** — one file with everything, which you email "
-        "back to the researcher.\n\n"
-        "The sidebar on the left has an optional slider tool — you can ignore it "
-        "entirely, it's not part of the task."
+        "1. **Go through 21 features, one at a time.** For each one, just say "
+        "yes/no on whether the ranking looks right — use the Next button to move on.\n"
+        "2. **Quick survey** — a short set of questions at the end.\n"
+        "3. **Download & send back** one file — that's it."
     )
 
 n_total = len(cps_df)
@@ -126,79 +149,91 @@ tab1, tab2, tab3 = st.tabs(
 with tab1:
     st.header("Feature Priority Rankings")
     st.markdown(
-        "These rankings were produced automatically from customer review data "
-        "using topic modelling and sentiment analysis. Your task is to review "
-        "them, and use the **your rank** column to say where you think each "
-        "feature should actually sit. If you disagree with the system, please "
-        "add a short reason in the comment box below the table."
+        "A system ranked 21 features from customer reviews. For each one, "
+        "you'll see its rank and the reviews behind it, then say whether "
+        "that ranking looks right to you."
     )
 
     display_df = ranked_df.copy()
     display_df.insert(0, "System Rank", range(1, len(display_df) + 1))
+    feature_list = display_df["Feature_Label"].tolist()
+    n_total_features = len(feature_list)
 
-    st.dataframe(
-        display_df[
-            [
-                "System Rank",
-                "Feature_Label",
-                "Review_Count",
-                "Frequency_Score",
-                "Sentiment_Score",
-                "Relevance_Score",
-                "CPS_adjusted",
-            ]
-        ].rename(columns={"CPS_adjusted": "CPS"}),
-        use_container_width=True,
-        hide_index=True,
-    )
+    if "current_index" not in st.session_state:
+        st.session_state.current_index = 0
 
-    st.markdown("---")
-    st.subheader("Inspect a feature and set your own rank")
-
-    feature_choice = st.selectbox(
-        "Choose a feature to inspect",
-        options=display_df["Feature_Label"].tolist(),
-    )
-
+    idx = max(0, min(st.session_state.current_index, n_total_features - 1))
+    feature_choice = feature_list[idx]
     row = display_df[display_df["Feature_Label"] == feature_choice].iloc[0]
     topic_id = row["Topic"]
+
+    st.markdown(f"**Feature {idx + 1} of {n_total_features}**")
 
     col1, col2 = st.columns([1, 2])
 
     with col1:
-        st.metric("System rank", int(row["System Rank"]))
-        st.metric("CPS score", round(row["CPS_adjusted"], 3))
-        st.metric("Review count", int(row["Review_Count"]))
+        friendly_name = TOPIC_FRIENDLY_NAMES.get(int(topic_id), feature_choice)
+        with st.container(border=True):
+            st.markdown(f"#### #{int(row['System Rank'])} — {friendly_name}")
+            st.caption(
+                f"Raw model keywords: *{feature_choice}* — these are the words "
+                f"the topic-modelling algorithm found most common in this group "
+                f"of reviews; the name above is a plain-language summary of them."
+            )
+            st.write(f"CPS score: **{row['CPS_adjusted']:.2f}**")
+            st.write(f"Based on **{int(row['Review_Count'])} reviews**")
 
-        max_rank = len(display_df)
-        your_rank = st.number_input(
-            "Your rank for this feature",
-            min_value=1,
-            max_value=max_rank,
-            value=st.session_state.manual_ranks.get(
-                feature_choice, int(row["System Rank"])
-            ),
-            key=f"rank_{feature_choice}",
+        already_disagree = feature_choice in st.session_state.manual_ranks
+        agree = st.radio(
+            "Does this ranking look right to you?",
+            options=["Yes, looks right", "No, I'd rank it differently"],
+            index=1 if already_disagree else 0,
+            key=f"agree_{feature_choice}",
         )
-        st.session_state.manual_ranks[feature_choice] = your_rank
 
-        comment = st.text_area(
-            "Why? (optional, but helpful if your rank differs from the system's)",
-            value=st.session_state.comments.get(feature_choice, ""),
-            key=f"comment_{feature_choice}",
-            height=100,
-        )
-        st.session_state.comments[feature_choice] = comment
+        if agree == "No, I'd rank it differently":
+            your_rank = st.number_input(
+                "What rank should it be? (1 = highest priority)",
+                min_value=1,
+                max_value=n_total_features,
+                value=st.session_state.manual_ranks.get(
+                    feature_choice, int(row["System Rank"])
+                ),
+                key=f"rank_{feature_choice}",
+            )
+            st.session_state.manual_ranks[feature_choice] = your_rank
+            comment = st.text_area(
+                "Why? (optional)",
+                value=st.session_state.comments.get(feature_choice, ""),
+                key=f"comment_{feature_choice}",
+                height=80,
+            )
+            st.session_state.comments[feature_choice] = comment
+        else:
+            st.session_state.manual_ranks[feature_choice] = int(row["System Rank"])
+            st.session_state.comments[feature_choice] = ""
+
+        nav1, nav2 = st.columns(2)
+        with nav1:
+            if st.button("← Previous", disabled=(idx == 0), use_container_width=True):
+                st.session_state.current_index = idx - 1
+                st.rerun()
+        with nav2:
+            if st.button("Next →", disabled=(idx == n_total_features - 1), use_container_width=True, type="primary"):
+                st.session_state.current_index = idx + 1
+                st.rerun()
 
     with col2:
-        st.markdown(f"**Topic keywords:** {feature_choice}")
+        st.markdown("**What customers are saying about this:**")
         matching_reviews = reviews_df[
             (reviews_df["topic"] == topic_id)
             & (reviews_df["productName"].isin(product_filter))
         ]
-        st.caption(f"{len(matching_reviews)} reviews behind this feature (filtered)")
-
-        sample = matching_reviews.sample(min(5, len(matching_reviews)), random_state=1) if len(matching_reviews) else matching_reviews
+        sample = (
+            matching_reviews.sample(min(4, len(matching_reviews)), random_state=1)
+            if len(matching_reviews)
+            else matching_reviews
+        )
         for _, r in sample.iterrows():
             sentiment_color = {
                 "positive": "🟢",
@@ -211,34 +246,33 @@ with tab1:
                     f"{r['starRating']}★ · {str(r['sentiment']).title()}"
                 )
                 text = str(r["reviewText"])
-                st.write(text[:400] + ("..." if len(text) > 400 else ""))
+                st.write(text[:350] + ("..." if len(text) > 350 else ""))
 
     st.markdown("---")
-    st.subheader("Your final ranking order")
-    manual_df = display_df.copy()
-    manual_df["Your Rank"] = manual_df["Feature_Label"].map(
-        lambda f: st.session_state.manual_ranks.get(f, None)
-    )
-    manual_df["Your Comment"] = manual_df["Feature_Label"].map(
-        lambda f: st.session_state.comments.get(f, "")
-    )
-    st.dataframe(
-        manual_df[["System Rank", "Feature_Label", "Your Rank", "Your Comment"]],
-        use_container_width=True,
-        hide_index=True,
-    )
-
     n_done = len(st.session_state.manual_ranks)
-    n_total_features = len(display_df)
+    st.progress(n_done / n_total_features, text=f"{n_done} of {n_total_features} features reviewed")
     if n_done < n_total_features:
-        st.warning(
-            f"You've set 'Your Rank' for {n_done} of {n_total_features} features. "
-            "Use the inspector above to go through the remaining ones before moving "
-            "to the survey — pick each feature from the dropdown, even if you agree "
-            "with the system's rank, just to confirm it."
-        )
+        st.info("Use ← Previous / Next → above to go through all features, then move to Tab 2.")
     else:
-        st.success(f"All {n_total_features} features ranked. You can move to Tab 2.")
+        st.success("All features reviewed. You can move to Tab 2 now.")
+
+    with st.expander("See the full list with your answers so far"):
+        manual_df = display_df.copy()
+        manual_df["Feature Name"] = manual_df["Topic"].map(
+            lambda t: TOPIC_FRIENDLY_NAMES.get(int(t), "")
+        )
+        manual_df["Your Rank"] = manual_df["Feature_Label"].map(
+            lambda f: st.session_state.manual_ranks.get(f, None)
+        )
+        manual_df["Your Comment"] = manual_df["Feature_Label"].map(
+            lambda f: st.session_state.comments.get(f, "")
+        )
+        st.dataframe(
+            manual_df[["System Rank", "Feature Name", "Feature_Label", "Your Rank", "Your Comment"]]
+            .rename(columns={"Feature_Label": "Raw Keywords"}),
+            use_container_width=True,
+            hide_index=True,
+        )
 
 
 # ============================================================
