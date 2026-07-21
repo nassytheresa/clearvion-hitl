@@ -64,16 +64,19 @@ st.sidebar.title("Clearvion")
 st.sidebar.caption("Human-in-the-Loop feature prioritisation")
 
 st.session_state.participant_id = st.sidebar.text_input(
-    "Participant ID or name",
+    "Your name or ID (please fill this in first)",
     value=st.session_state.participant_id,
     help="Used only to label your exported results file. Not stored anywhere else.",
 )
+if not st.session_state.participant_id.strip():
+    st.sidebar.warning("Please enter your name or ID above before starting.")
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("Scoring weights")
+st.sidebar.subheader("Optional: explore scoring weights")
 st.sidebar.caption(
-    "The system defaults to equal weighting across frequency, sentiment, "
-    "and relevance. Adjust the sliders to see how the ranking changes."
+    "This is not part of the task. It's just here so you can see how the "
+    "ranking would change under different weightings. Feel free to ignore "
+    "it and leave the sliders as they are."
 )
 w_freq = st.sidebar.slider("Frequency weight", 0.0, 1.0, 0.33, 0.01)
 w_sent = st.sidebar.slider("Sentiment weight", 0.0, 1.0, 0.33, 0.01)
@@ -88,6 +91,28 @@ product_filter = st.sidebar.multiselect(
     default=sorted(reviews_df["productName"].dropna().unique().tolist()),
 )
 
+
+# ----------------------------- Welcome panel -----------------------------
+
+with st.container(border=True):
+    st.markdown("### 👋 Welcome — here's what you'll do (about 15–20 minutes)")
+    st.markdown(
+        "1. **Review rankings** — a system has ranked 21 product features based on "
+        "customer reviews. Look at each one, see the evidence behind it, and set "
+        "your own rank if you'd rank it differently.\n"
+        "2. **Quick survey** — 10 short usability questions plus 3 open ones.\n"
+        "3. **Download & send back** — one file with everything, which you email "
+        "back to the researcher.\n\n"
+        "The sidebar on the left has an optional slider tool — you can ignore it "
+        "entirely, it's not part of the task."
+    )
+
+n_total = len(cps_df)
+n_ranked = len(st.session_state.manual_ranks)
+st.progress(
+    n_ranked / n_total if n_total else 0,
+    text=f"Progress: {n_ranked} of {n_total} features ranked",
+)
 
 # ----------------------------- Main tabs -----------------------------
 
@@ -202,10 +227,18 @@ with tab1:
         use_container_width=True,
         hide_index=True,
     )
-    st.caption(
-        "Tip: work through each feature in the inspector above to fill in "
-        "'Your Rank' for all of them before moving to the next tab."
-    )
+
+    n_done = len(st.session_state.manual_ranks)
+    n_total_features = len(display_df)
+    if n_done < n_total_features:
+        st.warning(
+            f"You've set 'Your Rank' for {n_done} of {n_total_features} features. "
+            "Use the inspector above to go through the remaining ones before moving "
+            "to the survey — pick each feature from the dropdown, even if you agree "
+            "with the system's rank, just to confirm it."
+        )
+    else:
+        st.success(f"All {n_total_features} features ranked. You can move to Tab 2.")
 
 
 # ============================================================
