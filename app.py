@@ -137,7 +137,8 @@ with st.container(border=True):
         "into 21 topics, things like \"Kanban boards\" or \"Trello's ease of "
         "use.\" Second, it works out whether customers feel positively or "
         "negatively about each topic. Third, it combines that into a single "
-        "priority score for each one. You'll see all 21 topics, one at a time."
+        "priority score for each one. To keep the task short, you'll review "
+        "the top 10 out of the 21 by priority score, one at a time."
     )
     st.markdown(
         "**Why we need you:** an algorithm can spot patterns in review text, "
@@ -148,7 +149,7 @@ with st.container(border=True):
     )
     st.markdown(
         "**What you'll do (about 15 minutes):**\n"
-        "1. Go through 21 features one at a time, and say yes or no on "
+        "1. Go through the top 10 features one at a time, and say yes or no on "
         "whether each ranking looks right to you.\n"
         "2. Answer a short survey about how easy this tool was to use. "
         "This part is about the tool, not the product features themselves.\n"
@@ -189,13 +190,17 @@ tab1, tab2, tab3 = st.tabs(
 with tab1:
     st.header("Feature Priority Rankings")
     st.markdown(
-        "A system ranked 21 features from customer reviews. For each one, "
-        "you'll see its rank and the reviews behind it, then say whether "
-        "that ranking looks right to you."
+        "The system found 21 topics in total, but to keep this task short, "
+        "you'll only review the **top 10 by priority score**. These are the "
+        "ones most relevant to an actual prioritisation decision. For each "
+        "one, you'll see its rank and the reviews behind it, then say "
+        "whether that ranking looks right to you."
     )
 
     display_df = ranked_df.copy()
     display_df.insert(0, "System Rank", range(1, len(display_df) + 1))
+    TASK_SIZE = 10
+    display_df = display_df.head(TASK_SIZE)
     feature_list = display_df["Feature_Label"].tolist()
     n_total_features = len(feature_list)
 
@@ -277,11 +282,34 @@ with tab1:
             (reviews_df["topic"] == topic_id)
             & (reviews_df["productName"].isin(product_filter))
         ]
-        sample = (
-            matching_reviews.sample(min(4, len(matching_reviews)), random_state=1)
-            if len(matching_reviews)
-            else matching_reviews
-        )
+
+        def stratified_sample(df, n=4, seed=1):
+            """Pick a mix across sentiments instead of pure random, so a
+            positive-skewed corpus doesn't hide the negative/neutral reviews
+            that exist for this topic."""
+            if len(df) == 0:
+                return df
+            groups = [g for _, g in df.groupby("sentiment") if len(g) > 0]
+            picks = []
+            per_group = max(1, n // max(1, len(groups)))
+            for g in groups:
+                picks.append(g.sample(min(per_group, len(g)), random_state=seed))
+            result = pd.concat(picks)
+            if len(result) < n:
+                remaining = df.drop(result.index)
+                extra = remaining.sample(min(n - len(result), len(remaining)), random_state=seed)
+                result = pd.concat([result, extra])
+            return result.sample(min(n, len(result)), random_state=seed)
+
+        sample = stratified_sample(matching_reviews, n=4)
+        sentiment_counts_here = matching_reviews["sentiment"].value_counts()
+        if len(sentiment_counts_here) == 1:
+            only_sentiment = sentiment_counts_here.index[0]
+            st.caption(
+                f"All {len(matching_reviews)} reviews found for this topic were "
+                f"classified {str(only_sentiment).lower()}. That's the actual "
+                f"data, not a display choice."
+            )
         for _, r in sample.iterrows():
             sentiment_color = {
                 "positive": "🟢",
