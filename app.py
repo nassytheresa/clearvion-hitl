@@ -178,65 +178,74 @@ st.progress(
     text=f"Progress: {n_ranked} of {n_total} features ranked",
 )
 
-# ----------------------------- Main tabs -----------------------------
+# ----------------------------- Step 1: Feature review -----------------------------
 
-tab1, tab2, tab3 = st.tabs(
-    ["1. Review & Adjust Rankings", "2. Usability Survey", "3. Submit Results"]
+st.markdown("---")
+st.header("Step 1: Review the Top 10 Features")
+st.markdown(
+    "The system found 21 topics in total, but to keep this task short, "
+    "you'll only review the **top 10 by priority score**. These are the "
+    "ones most relevant to an actual prioritisation decision. For each "
+    "one below, see the reviews behind it, then say whether the ranking "
+    "looks right to you."
 )
 
-# ============================================================
-# TAB 1: Ranking review
-# ============================================================
-with tab1:
-    st.header("Feature Priority Rankings")
-    st.markdown(
-        "The system found 21 topics in total, but to keep this task short, "
-        "you'll only review the **top 10 by priority score**. These are the "
-        "ones most relevant to an actual prioritisation decision. For each "
-        "one, you'll see its rank and the reviews behind it, then say "
-        "whether that ranking looks right to you."
-    )
+display_df = ranked_df.copy()
+display_df.insert(0, "System Rank", range(1, len(display_df) + 1))
+TASK_SIZE = 10
+display_df = display_df.head(TASK_SIZE)
+n_total_features = len(display_df)
 
-    display_df = ranked_df.copy()
-    display_df.insert(0, "System Rank", range(1, len(display_df) + 1))
-    TASK_SIZE = 10
-    display_df = display_df.head(TASK_SIZE)
-    feature_list = display_df["Feature_Label"].tolist()
-    n_total_features = len(feature_list)
 
-    if "current_index" not in st.session_state:
-        st.session_state.current_index = 0
+def stratified_sample(df, n=4, seed=1):
+    """Pick a mix across sentiments instead of pure random, so a
+    positive-skewed corpus doesn't hide the negative/neutral reviews
+    that exist for this topic."""
+    if len(df) == 0:
+        return df
+    groups = [g for _, g in df.groupby("sentiment") if len(g) > 0]
+    picks = []
+    per_group = max(1, n // max(1, len(groups)))
+    for g in groups:
+        picks.append(g.sample(min(per_group, len(g)), random_state=seed))
+    result = pd.concat(picks)
+    if len(result) < n:
+        remaining = df.drop(result.index)
+        extra = remaining.sample(min(n - len(result), len(remaining)), random_state=seed)
+        result = pd.concat([result, extra])
+    return result.sample(min(n, len(result)), random_state=seed)
 
-    idx = max(0, min(st.session_state.current_index, n_total_features - 1))
-    feature_choice = feature_list[idx]
-    row = display_df[display_df["Feature_Label"] == feature_choice].iloc[0]
+
+for _, row in display_df.iterrows():
+    feature_choice = row["Feature_Label"]
     topic_id = row["Topic"]
+    friendly_name = TOPIC_FRIENDLY_NAMES.get(int(topic_id), feature_choice)
 
-    st.markdown(f"**Feature {idx + 1} of {n_total_features}**")
+    st.markdown("---")
+    st.subheader(f"#{int(row['System Rank'])}: {friendly_name}")
+    st.caption(
+        f"Raw model keywords: *{feature_choice}*. These are the words the "
+        f"topic-modelling algorithm found most common in this group of "
+        f"reviews; the name above is a plain-language summary of them."
+    )
 
     col1, col2 = st.columns([1, 2])
 
     with col1:
-        friendly_name = TOPIC_FRIENDLY_NAMES.get(int(topic_id), feature_choice)
-        with st.container(border=True):
-            st.markdown(f"#### #{int(row['System Rank'])}: {friendly_name}")
-            st.caption(
-                f"Raw model keywords: *{feature_choice}*. These are the words "
-                f"the topic-modelling algorithm found most common in this group "
-                f"of reviews; the name above is a plain-language summary of them."
-            )
-            st.write(
-                f"**CPS score: {row['CPS_adjusted']:.2f}** out of 1.00 "
-                f"(higher = higher priority)"
-            )
-            st.caption(
-                f"Made up of: Frequency {row['Frequency_Score']:.2f}, "
-                f"Sentiment {row['Sentiment_Score']:.2f}, "
-                f"Relevance {row['Relevance_Score']:.2f}. Each is also out of 1.00"
-            )
-            st.write(f"Based on **{int(row['Review_Count'])} reviews**")
+        st.write(
+            f"**CPS score: {row['CPS_adjusted']:.2f}** out of 1.00 "
+            f"(higher = higher priority)"
+        )
+        st.caption(
+            f"Made up of: Frequency {row['Frequency_Score']:.2f}, "
+            f"Sentiment {row['Sentiment_Score']:.2f}, "
+            f"Relevance {row['Relevance_Score']:.2f}. Each is also out of 1.00"
+        )
+        st.write(f"Based on **{int(row['Review_Count'])} reviews**")
 
-        already_disagree = feature_choice in st.session_state.manual_ranks
+        already_disagree = feature_choice in st.session_state.manual_ranks and (
+            st.session_state.manual_ranks[feature_choice] != int(row["System Rank"])
+        )
         agree = st.radio(
             "Does this ranking look right to you?",
             options=["Yes, looks right", "No, I'd rank it differently"],
@@ -259,22 +268,12 @@ with tab1:
                 "Why? (optional)",
                 value=st.session_state.comments.get(feature_choice, ""),
                 key=f"comment_{feature_choice}",
-                height=80,
+                height=150,
             )
             st.session_state.comments[feature_choice] = comment
         else:
             st.session_state.manual_ranks[feature_choice] = int(row["System Rank"])
             st.session_state.comments[feature_choice] = ""
-
-        nav1, nav2 = st.columns(2)
-        with nav1:
-            if st.button("← Previous", disabled=(idx == 0), use_container_width=True):
-                st.session_state.current_index = idx - 1
-                st.rerun()
-        with nav2:
-            if st.button("Next →", disabled=(idx == n_total_features - 1), use_container_width=True, type="primary"):
-                st.session_state.current_index = idx + 1
-                st.rerun()
 
     with col2:
         st.markdown("**What customers are saying about this:**")
@@ -282,24 +281,6 @@ with tab1:
             (reviews_df["topic"] == topic_id)
             & (reviews_df["productName"].isin(product_filter))
         ]
-
-        def stratified_sample(df, n=4, seed=1):
-            """Pick a mix across sentiments instead of pure random, so a
-            positive-skewed corpus doesn't hide the negative/neutral reviews
-            that exist for this topic."""
-            if len(df) == 0:
-                return df
-            groups = [g for _, g in df.groupby("sentiment") if len(g) > 0]
-            picks = []
-            per_group = max(1, n // max(1, len(groups)))
-            for g in groups:
-                picks.append(g.sample(min(per_group, len(g)), random_state=seed))
-            result = pd.concat(picks)
-            if len(result) < n:
-                remaining = df.drop(result.index)
-                extra = remaining.sample(min(n - len(result), len(remaining)), random_state=seed)
-                result = pd.concat([result, extra])
-            return result.sample(min(n, len(result)), random_state=seed)
 
         sample = stratified_sample(matching_reviews, n=4)
         sentiment_counts_here = matching_reviews["sentiment"].value_counts()
@@ -321,101 +302,99 @@ with tab1:
                     f"{sentiment_color} **{r['productName']}** · "
                     f"{r['starRating']}★ · {str(r['sentiment']).title()}"
                 )
-                text = str(r["reviewText"])
-                st.write(text[:350] + ("..." if len(text) > 350 else ""))
+                st.write(str(r["reviewText"]))
 
-    st.markdown("---")
-    n_done = len(st.session_state.manual_ranks)
-    st.progress(n_done / n_total_features, text=f"{n_done} of {n_total_features} features reviewed")
-    if n_done < n_total_features:
-        st.info("Use ← Previous / Next → above to go through all features, then move to Tab 2.")
-    else:
-        st.success("All features reviewed. You can move to Tab 2 now.")
+st.markdown("---")
+n_done = len(st.session_state.manual_ranks)
+st.progress(n_done / n_total_features, text=f"{n_done} of {n_total_features} features reviewed")
+if n_done < n_total_features:
+    st.info("Scroll up to review any remaining features before moving to Step 2.")
+else:
+    st.success("All features reviewed. Continue to Step 2 below.")
 
-    with st.expander("See the full list with your answers so far"):
-        manual_df = display_df.copy()
-        manual_df["Feature Name"] = manual_df["Topic"].map(
-            lambda t: TOPIC_FRIENDLY_NAMES.get(int(t), "")
-        )
-        manual_df["Your Rank"] = manual_df["Feature_Label"].map(
-            lambda f: st.session_state.manual_ranks.get(f, None)
-        )
-        manual_df["Your Comment"] = manual_df["Feature_Label"].map(
-            lambda f: st.session_state.comments.get(f, "")
-        )
-        st.dataframe(
-            manual_df[["System Rank", "Feature Name", "Feature_Label", "Your Rank", "Your Comment"]]
-            .rename(columns={"Feature_Label": "Raw Keywords"}),
-            use_container_width=True,
-            hide_index=True,
-        )
-
-
-# ============================================================
-# TAB 2: SUS + qualitative feedback
-# ============================================================
-with tab2:
-    st.header("Usability Survey")
-    st.markdown(
-        "These questions are about **your experience using this tool**, not "
-        "about whether you agreed with the feature rankings. There are no "
-        "right or wrong answers here. This is just to check whether the "
-        "tool itself is clear and easy to use for a product manager."
+with st.expander("See the full list with your answers so far"):
+    manual_df = display_df.copy()
+    manual_df["Feature Name"] = manual_df["Topic"].map(
+        lambda t: TOPIC_FRIENDLY_NAMES.get(int(t), "")
     )
-    st.info(
-        "For each statement below, pick how much you agree, from "
-        "**1 (strongly disagree)** to **5 (strongly agree)**. This is a "
-        "standard, widely-used usability questionnaire called the SUS "
-        "(System Usability Scale). You don't need to know that to answer it, "
-        "just go with your gut reaction."
+    manual_df["Your Rank"] = manual_df["Feature_Label"].map(
+        lambda f: st.session_state.manual_ranks.get(f, None)
+    )
+    manual_df["Your Comment"] = manual_df["Feature_Label"].map(
+        lambda f: st.session_state.comments.get(f, "")
+    )
+    st.dataframe(
+        manual_df[["System Rank", "Feature Name", "Feature_Label", "Your Rank", "Your Comment"]]
+        .rename(columns={"Feature_Label": "Raw Keywords"}),
+        use_container_width=True,
+        hide_index=True,
     )
 
-    sus_items = [
-        "I think that I would like to use this system frequently.",
-        "I found the system unnecessarily complex.",
-        "I thought the system was easy to use.",
-        "I think that I would need the support of a technical person to use this system.",
-        "I found the various functions in this system were well integrated.",
-        "I thought there was too much inconsistency in this system.",
-        "I would imagine that most people would learn to use this system very quickly.",
-        "I found the system very cumbersome to use.",
-        "I felt very confident using the system.",
-        "I needed to learn a lot of things before I could get going with this system.",
-    ]
 
-    scale_labels = [
-        "1 – Strongly disagree",
-        "2",
-        "3",
-        "4",
-        "5 – Strongly agree",
-    ]
+# ----------------------------- Step 2: Survey -----------------------------
 
-    for i, item in enumerate(sus_items):
-        st.session_state.sus_answers[i] = st.radio(
-            f"{i + 1}. {item}",
-            options=[1, 2, 3, 4, 5],
-            format_func=lambda x: scale_labels[x - 1],
-            horizontal=True,
-            key=f"sus_{i}",
-            index=None,
-        )
+st.markdown("---")
+st.header("Step 2: Usability Survey")
+st.markdown(
+    "These questions are about **your experience using this tool**, not "
+    "about whether you agreed with the feature rankings. There are no "
+    "right or wrong answers here. This is just to check whether the "
+    "tool itself is clear and easy to use for a product manager."
+)
+st.info(
+    "For each statement below, pick how much you agree, from "
+    "**1 (strongly disagree)** to **5 (strongly agree)**. This is a "
+    "standard, widely-used usability questionnaire called the SUS "
+    "(System Usability Scale). You don't need to know that to answer it, "
+    "just go with your gut reaction."
+)
 
-    st.markdown("---")
-    st.subheader("A few open questions")
-    st.session_state.qual_feedback["clarity"] = st.text_area(
-        "Was the reasoning behind each ranking clear to you? Why or why not?",
-        value=st.session_state.qual_feedback.get("clarity", ""),
+sus_items = [
+    "I think that I would like to use this system frequently.",
+    "I found the system unnecessarily complex.",
+    "I thought the system was easy to use.",
+    "I think that I would need the support of a technical person to use this system.",
+    "I found the various functions in this system were well integrated.",
+    "I thought there was too much inconsistency in this system.",
+    "I would imagine that most people would learn to use this system very quickly.",
+    "I found the system very cumbersome to use.",
+    "I felt very confident using the system.",
+    "I needed to learn a lot of things before I could get going with this system.",
+]
+
+scale_labels = [
+    "1 – Strongly disagree",
+    "2",
+    "3",
+    "4",
+    "5 – Strongly agree",
+]
+
+for i, item in enumerate(sus_items):
+    st.session_state.sus_answers[i] = st.radio(
+        f"{i + 1}. {item}",
+        options=[1, 2, 3, 4, 5],
+        format_func=lambda x: scale_labels[x - 1],
+        horizontal=True,
+        key=f"sus_{i}",
+        index=None,
     )
-    st.session_state.qual_feedback["evidence"] = st.text_area(
-        "Was the supporting review evidence useful when deciding whether to "
-        "agree or disagree with a ranking?",
-        value=st.session_state.qual_feedback.get("evidence", ""),
-    )
-    st.session_state.qual_feedback["confidence"] = st.text_area(
-        "How confident are you in the final rankings you produced, and why?",
-        value=st.session_state.qual_feedback.get("confidence", ""),
-    )
+
+st.markdown("---")
+st.subheader("A few open questions")
+st.session_state.qual_feedback["clarity"] = st.text_area(
+    "Was the reasoning behind each ranking clear to you? Why or why not?",
+    value=st.session_state.qual_feedback.get("clarity", ""),
+)
+st.session_state.qual_feedback["evidence"] = st.text_area(
+    "Was the supporting review evidence useful when deciding whether to "
+    "agree or disagree with a ranking?",
+    value=st.session_state.qual_feedback.get("evidence", ""),
+)
+st.session_state.qual_feedback["confidence"] = st.text_area(
+    "How confident are you in the final rankings you produced, and why?",
+    value=st.session_state.qual_feedback.get("confidence", ""),
+)
 
 
 def compute_sus_score(answers):
@@ -433,73 +412,71 @@ def compute_sus_score(answers):
     return total * 2.5
 
 
-# ============================================================
-# TAB 3: Submit / export
-# ============================================================
-with tab3:
-    st.header("Submit Your Results")
-    st.markdown(
-        "This will package your rankings, comments, and survey answers into "
-        "a single file. Please download it and send it back to the "
-        "researcher. Nothing is uploaded automatically."
+# ----------------------------- Step 3: Submit / export -----------------------------
+
+st.markdown("---")
+st.header("Step 3: Submit Your Results")
+st.markdown(
+    "This will package your rankings, comments, and survey answers into "
+    "a single file. Please download it and send it back to the "
+    "researcher. Nothing is uploaded automatically."
+)
+
+sus_score = compute_sus_score(st.session_state.sus_answers)
+if sus_score is not None:
+    st.success(f"Your SUS score: {sus_score:.1f} / 100")
+    if sus_score >= 68:
+        st.caption(
+            "For context: 68 is considered an average, acceptable score for "
+            "this kind of questionnaire. Your score is at or above that."
+        )
+    else:
+        st.caption(
+            "For context: 68 is considered an average, acceptable score for "
+            "this kind of questionnaire. Your score is below that, which is "
+            "useful feedback, not a problem with your answers."
+        )
+else:
+    st.warning("Complete all 10 usability questions in Step 2 to compute your SUS score.")
+
+missing_ranks = [
+    f for f in display_df["Feature_Label"]
+    if f not in st.session_state.manual_ranks
+]
+if missing_ranks:
+    st.info(
+        f"You haven't reviewed {len(missing_ranks)} feature(s) yet. "
+        "You can still submit, but consider scrolling up to Step 1 first."
     )
 
-    sus_score = compute_sus_score(st.session_state.sus_answers)
-    if sus_score is not None:
-        st.success(f"Your SUS score: {sus_score:.1f} / 100")
-        if sus_score >= 68:
-            st.caption(
-                "For context: 68 is considered an average, acceptable score for "
-                "this kind of questionnaire. Your score is at or above that."
-            )
-        else:
-            st.caption(
-                "For context: 68 is considered an average, acceptable score for "
-                "this kind of questionnaire. Your score is below that, which is "
-                "useful feedback, not a problem with your answers."
-            )
+if st.button("Prepare download", type="primary"):
+    if not st.session_state.participant_id.strip():
+        st.error("Please enter a participant ID or name in the sidebar first.")
     else:
-        st.warning("Complete all 10 usability questions in Tab 2 to compute your SUS score.")
-
-    missing_ranks = [
-        f for f in ranked_df["Feature_Label"]
-        if f not in st.session_state.manual_ranks
-    ]
-    if missing_ranks:
-        st.info(
-            f"You haven't set 'Your Rank' for {len(missing_ranks)} feature(s) yet. "
-            "You can still submit, but consider going back to Tab 1 first."
+        out = display_df.copy()
+        out["Your_Rank"] = out["Feature_Label"].map(
+            lambda f: st.session_state.manual_ranks.get(f, "")
         )
+        out["Your_Comment"] = out["Feature_Label"].map(
+            lambda f: st.session_state.comments.get(f, "")
+        )
+        out["Participant_ID"] = st.session_state.participant_id
+        out["Weight_Frequency"] = w_freq
+        out["Weight_Sentiment"] = w_sent
+        out["Weight_Relevance"] = w_rel
+        out["SUS_Score"] = sus_score if sus_score is not None else ""
+        out["Feedback_Clarity"] = st.session_state.qual_feedback.get("clarity", "")
+        out["Feedback_Evidence"] = st.session_state.qual_feedback.get("evidence", "")
+        out["Feedback_Confidence"] = st.session_state.qual_feedback.get("confidence", "")
+        out["Timestamp"] = datetime.now().isoformat()
 
-    if st.button("Prepare download", type="primary"):
-        if not st.session_state.participant_id.strip():
-            st.error("Please enter a participant ID or name in the sidebar first.")
-        else:
-            out = ranked_df.copy()
-            out.insert(0, "System_Rank", range(1, len(out) + 1))
-            out["Your_Rank"] = out["Feature_Label"].map(
-                lambda f: st.session_state.manual_ranks.get(f, "")
-            )
-            out["Your_Comment"] = out["Feature_Label"].map(
-                lambda f: st.session_state.comments.get(f, "")
-            )
-            out["Participant_ID"] = st.session_state.participant_id
-            out["Weight_Frequency"] = w_freq
-            out["Weight_Sentiment"] = w_sent
-            out["Weight_Relevance"] = w_rel
-            out["SUS_Score"] = sus_score if sus_score is not None else ""
-            out["Feedback_Clarity"] = st.session_state.qual_feedback.get("clarity", "")
-            out["Feedback_Evidence"] = st.session_state.qual_feedback.get("evidence", "")
-            out["Feedback_Confidence"] = st.session_state.qual_feedback.get("confidence", "")
-            out["Timestamp"] = datetime.now().isoformat()
+        csv_bytes = out.to_csv(index=False).encode("utf-8")
+        fname = f"clearvion_results_{st.session_state.participant_id.strip().replace(' ', '_')}.csv"
 
-            csv_bytes = out.to_csv(index=False).encode("utf-8")
-            fname = f"clearvion_results_{st.session_state.participant_id.strip().replace(' ', '_')}.csv"
-
-            st.download_button(
-                "Download my results (CSV)",
-                data=csv_bytes,
-                file_name=fname,
-                mime="text/csv",
-            )
-            st.success("File ready. Click the button above to download, then send it to the researcher.")
+        st.download_button(
+            "Download my results (CSV)",
+            data=csv_bytes,
+            file_name=fname,
+            mime="text/csv",
+        )
+        st.success("File ready. Click the button above to download, then send it to the researcher.")
