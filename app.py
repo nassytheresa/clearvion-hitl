@@ -11,6 +11,11 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 import io
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email.mime.text import MIMEText
+from email import encoders
 
 st.set_page_config(page_title="Clearvion", layout="wide", page_icon="🎯")
 
@@ -20,27 +25,36 @@ DATA_DIR = "data"
 # The raw keyword string (Feature_Label in the CSV) is still shown alongside
 # these for transparency, but this is what participants see as the headline.
 TOPIC_FRIENDLY_NAMES = {
-    0: "Asana: Core Task & Project Management",
-    1: "Jira: Issue Tracking & Team Workflows",
+    0: "Core Task & Project Management",
+    1: "Issue Tracking & Team Workflows",
     2: "Day-to-Day Ease of Use for Task Tracking",
     3: "General Project Management Capability",
-    4: "Trello: Task & Card Usability",
-    5: "Trello: Board-Based Project Management",
+    4: "Task & Card Usability",
+    5: "Board-Based Project Management",
     6: "Simplicity & Understandability of Boards",
-    7: "Trello: Overall Ease of Use",
-    8: "Trello: Visual Board Layout",
+    7: "Overall Ease of Use",
+    8: "Visual Board Layout",
     9: "Kanban Board Functionality",
-    10: "Trello: Team Task Clarity",
+    10: "Team Task Clarity",
     11: "Positive Sentiment on Boards & Projects",
-    12: "Trello: Simple, Organized Interface",
-    13: "Trello: Card-Based Ease of Use",
-    14: "Trello for Professional / Business Use",
-    15: "Trello: Simplicity vs. Complex Needs",
+    12: "Simple, Organized Interface",
+    13: "Card-Based Ease of Use",
+    14: "Professional / Business Use",
+    15: "Simplicity vs. Complex Needs",
     16: "Ticket Tracking & Enhancement Requests",
     17: "Card Due Dates & Lead Tracking",
     18: "Team Tracking Help (Mixed Clarity)",
-    19: "Trello: Posting & Card Functionality",
-    20: "Trello: Task Ordering & Organization",
+    19: "Posting & Card Functionality",
+    20: "Task Ordering & Organization",
+}
+
+# Which tool's reviews this feature mostly came from, shown as context only,
+# never as the headline, so the feature itself stays the focus.
+TOPIC_DOMINANT_TOOL = {
+    0: "Asana", 1: "Jira", 2: None, 3: None, 4: "Trello", 5: "Trello",
+    6: None, 7: "Trello", 8: "Trello", 9: None, 10: "Trello", 11: None,
+    12: "Trello", 13: "Trello", 14: "Trello", 15: "Trello", 16: None,
+    17: None, 18: None, 19: "Trello", 20: "Trello",
 }
 
 
@@ -120,6 +134,13 @@ with st.sidebar.expander("Advanced (optional): filter evidence by product"):
 
 
 # ----------------------------- Welcome panel -----------------------------
+
+st.markdown(
+    "## 🎯 What this tool does\n"
+    "**It helps decide which product features to build next, by ranking "
+    "them based on what real customers said in their reviews.** Your job "
+    "is to check whether that ranking matches your own judgement."
+)
 
 with st.container(border=True):
     st.markdown("### 👋 Welcome")
@@ -218,16 +239,42 @@ def stratified_sample(df, n=4, seed=1):
 
 for _, row in display_df.iterrows():
     feature_choice = row["Feature_Label"]
-    topic_id = row["Topic"]
-    friendly_name = TOPIC_FRIENDLY_NAMES.get(int(topic_id), feature_choice)
+    topic_id = int(row["Topic"])
+    friendly_name = TOPIC_FRIENDLY_NAMES.get(topic_id, feature_choice)
+    dominant_tool = TOPIC_DOMINANT_TOOL.get(topic_id)
 
     st.markdown("---")
     st.subheader(f"#{int(row['System Rank'])}: {friendly_name}")
+    tool_note = f" Mostly discussed in **{dominant_tool}** reviews." if dominant_tool else " Discussed across multiple tools."
     st.caption(
-        f"Raw model keywords: *{feature_choice}*. These are the words the "
-        f"topic-modelling algorithm found most common in this group of "
-        f"reviews; the name above is a plain-language summary of them."
+        f"Raw model keywords: *{feature_choice}*.{tool_note} The name above "
+        f"is a plain-language summary of what customers were saying."
     )
+
+    def build_justification(freq, sent, rel):
+        parts = []
+        if freq >= 0.15:
+            parts.append("it's mentioned very frequently in reviews")
+        elif freq >= 0.03:
+            parts.append("it comes up a moderate number of times in reviews")
+        else:
+            parts.append("it's mentioned in relatively few reviews")
+        if sent >= 0.85:
+            parts.append("customers who mention it are almost entirely positive")
+        elif sent >= 0.6:
+            parts.append("customer sentiment about it is fairly positive")
+        else:
+            parts.append("customer sentiment about it is mixed or negative")
+        if rel >= 0.5:
+            parts.append("it's a central, defining part of its topic")
+        else:
+            parts.append("it's a smaller part of a broader topic")
+        return "This feature ranks where it does because " + ", ".join(parts) + "."
+
+    justification = build_justification(
+        row["Frequency_Score"], row["Sentiment_Score"], row["Relevance_Score"]
+    )
+    st.info(justification)
 
     col1, col2 = st.columns([1, 2])
 
@@ -449,7 +496,44 @@ if missing_ranks:
         "You can still submit, but consider scrolling up to Step 1 first."
     )
 
-if st.button("Prepare download", type="primary"):
+def try_send_email(csv_bytes, fname, participant_id):
+    """Attempt to email the results directly to the researcher. Returns
+    True if sent successfully, False if email isn't configured or fails,
+    in which case the caller should fall back to a download button."""
+    try:
+        sender = st.secrets["email"]["sender"]
+        app_password = st.secrets["email"]["app_password"]
+        recipient = st.secrets["email"]["recipient"]
+    except Exception:
+        return False
+
+    try:
+        msg = MIMEMultipart()
+        msg["From"] = sender
+        msg["To"] = recipient
+        msg["Subject"] = f"Clearvion pilot results: {participant_id}"
+        msg.attach(MIMEText(
+            f"Pilot results from participant: {participant_id}\n"
+            f"Submitted: {datetime.now().isoformat()}\n\n"
+            f"See attached CSV.",
+            "plain",
+        ))
+        part = MIMEBase("application", "octet-stream")
+        part.set_payload(csv_bytes)
+        encoders.encode_base64(part)
+        part.add_header("Content-Disposition", f"attachment; filename={fname}")
+        msg.attach(part)
+
+        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+            server.starttls()
+            server.login(sender, app_password)
+            server.sendmail(sender, recipient, msg.as_string())
+        return True
+    except Exception:
+        return False
+
+
+if st.button("Submit my results", type="primary"):
     if not st.session_state.participant_id.strip():
         st.error("Please enter a participant ID or name in the sidebar first.")
     else:
@@ -473,10 +557,79 @@ if st.button("Prepare download", type="primary"):
         csv_bytes = out.to_csv(index=False).encode("utf-8")
         fname = f"clearvion_results_{st.session_state.participant_id.strip().replace(' ', '_')}.csv"
 
-        st.download_button(
-            "Download my results (CSV)",
-            data=csv_bytes,
-            file_name=fname,
-            mime="text/csv",
+        sent = try_send_email(csv_bytes, fname, st.session_state.participant_id)
+
+        if sent:
+            st.success(
+                "Done! Your results were sent directly to the researcher. "
+                "You don't need to do anything else, thank you for your time."
+            )
+        else:
+            st.warning(
+                "Your results are ready, but automatic sending isn't set up "
+                "yet. Please download the file below and send it to the "
+                "researcher directly."
+            )
+            st.download_button(
+                "Download my results (CSV)",
+                data=csv_bytes,
+                file_name=fname,
+                mime="text/csv",
+            )
+
+
+# ----------------------------- Optional: tool comparison -----------------------------
+
+st.markdown("---")
+with st.expander("Bonus (optional): See how Jira, Asana, and Trello compare overall"):
+    st.markdown(
+        "This is extra context, not part of the task above. The 10 features "
+        "you just reviewed came from topics that mostly landed within a "
+        "single product, since that's how the reviews happened to cluster. "
+        "This section takes a different approach: it groups reviews from "
+        "**all three tools** into four broad capability areas by keyword, "
+        "so you can see how the tools stack up against each other directly."
+    )
+
+    COMPARISON_CATEGORIES = {
+        "Task & Card Management": ["task", "to-do", "checklist", "card"],
+        "Boards & Visual Organization": ["board", "kanban", "visual", "drag"],
+        "Tracking & Reporting": ["track", "report", "dashboard", "ticket", "overview"],
+        "Ease of Use & Onboarding": ["easy", "simple", "intuitive", "learn", "user friendly", "interface"],
+    }
+
+    lower_text = reviews_df["reviewText"].astype(str).str.lower()
+
+    for cat_name, keywords in COMPARISON_CATEGORIES.items():
+        st.markdown(f"**{cat_name}**")
+        mask = lower_text.str.contains("|".join(keywords))
+        cat_reviews = reviews_df[mask]
+        breakdown = (
+            cat_reviews.groupby(["productName", "sentiment"])
+            .size()
+            .unstack(fill_value=0)
         )
-        st.success("File ready. Click the button above to download, then send it to the researcher.")
+        for col in ["positive", "neutral", "negative"]:
+            if col not in breakdown.columns:
+                breakdown[col] = 0
+        breakdown = breakdown[["positive", "neutral", "negative"]]
+
+        cols = st.columns(3)
+        for i, product in enumerate(["Jira", "Asana", "Trello"]):
+            with cols[i]:
+                if product in breakdown.index:
+                    pos = int(breakdown.loc[product, "positive"])
+                    neu = int(breakdown.loc[product, "neutral"])
+                    neg = int(breakdown.loc[product, "negative"])
+                    total = pos + neu + neg
+                    st.markdown(f"{product} ({total})")
+                    st.caption(f"🟢 {pos}  ⚪ {neu}  🔴 {neg}")
+                else:
+                    st.markdown(f"{product}")
+                    st.caption("No matching reviews")
+    st.caption(
+        "Note: Jira and Asana reviews mostly concentrated into one dominant "
+        "theme each, while Trello's split into several smaller ones. That's "
+        "why Trello shows up more often in the ranked list above, it isn't "
+        "that Trello has more reviews overall."
+    )
