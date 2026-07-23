@@ -257,10 +257,11 @@ st.info(
     "of Jira, Asana, and Trello, things like \"Kanban Board Functionality\" "
     "or \"Issue Tracking Across Team Workflows.\" They were found by "
     "running NLP on 738 real customer reviews.\n\n"
-    "**How do I rank them?** Imagine you're the product manager for one "
-    "of these tools, deciding what to focus on next. Based only on the "
-    "name and description shown, which of these customer-driven themes "
-    "would you personally consider most important?"
+    "**How do I rank them?** Imagine you were the product manager using "
+    "one or more of the above mentioned systems/tools. Based only on the "
+    "name and description of some of the features these tools have, how "
+    "would you rank these features according to their order of importance "
+    "to you?"
 )
 st.markdown(
     "Give each feature a rank from **1 (highest priority)** to "
