@@ -251,10 +251,20 @@ with st.container(border=True):
 st.markdown("---")
 st.markdown('<div class="step-badge">STEP 1</div>', unsafe_allow_html=True)
 st.header("Rank These 10 Features")
+st.info(
+    "**What are these?** Each of the 10 items below represents a specific "
+    "capability area that customers actually talk about in their reviews "
+    "of Jira, Asana, and Trello, things like \"Kanban Board Functionality\" "
+    "or \"Issue Tracking Across Team Workflows.\" They were found by "
+    "running NLP on 738 real customer reviews.\n\n"
+    "**How do I rank them?** Imagine you're the product manager for one "
+    "of these tools, deciding what to focus on next. Based only on the "
+    "name and description shown, which of these customer-driven themes "
+    "would you personally consider most important?"
+)
 st.markdown(
-    "Based only on the name and description below, give each feature a "
-    "rank from **1 (highest priority)** to **10 (lowest priority)**. Use "
-    "each number once."
+    "Give each feature a rank from **1 (highest priority)** to "
+    "**10 (lowest priority)**. Use each number once."
 )
 
 for _, row in features_df.iterrows():
