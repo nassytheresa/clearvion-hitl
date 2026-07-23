@@ -199,12 +199,13 @@ st.sidebar.title("Clearvion")
 st.sidebar.caption("Feature prioritisation, human-in-the-loop")
 
 st.session_state.participant_id = st.sidebar.text_input(
-    "Your name or ID (please fill this in first)",
+    "Your name",
     value=st.session_state.participant_id,
     help="Used only to label your results. Not stored anywhere else.",
 )
-if not st.session_state.participant_id.strip():
-    st.sidebar.warning("Please enter your name or ID above before starting.")
+id_missing = not st.session_state.participant_id.strip()
+if id_missing:
+    st.sidebar.error("⬆️ Enter your name here before starting below.")
 
 with st.sidebar.expander("Advanced (optional): filter evidence by product"):
     product_filter = st.multiselect(
@@ -220,12 +221,16 @@ with st.sidebar.expander("Advanced (optional): filter evidence by product"):
 st.markdown(
     """
     <div class="hero-banner">
-    <h1>🎯 What this tool does</h1>
-    <p><b>It helps decide which product features to build next</b>, by comparing your judgement against a system that ranked features based on real customer reviews.</p>
+    <h1>🎯 About this study</h1>
+    <p>This is part of a Master's thesis on whether AI analysis of customer reviews can genuinely help product managers prioritise features, without replacing their own judgement. "The system" refers to an NLP pipeline that reads customer reviews and produces a suggested feature ranking. Your task is to give your own independent ranking, then compare it to the system's, so we can see where expert judgement and AI analysis agree or diverge.</p>
     </div>
     """,
     unsafe_allow_html=True,
 )
+
+if id_missing:
+    st.error("👈 Please enter your name in the sidebar on the left before starting.")
+    st.stop()
 
 with st.container(border=True):
     st.markdown("### How this works (about 10 minutes)")
@@ -251,44 +256,67 @@ with st.container(border=True):
 st.markdown("---")
 st.markdown('<div class="step-badge">STEP 1</div>', unsafe_allow_html=True)
 st.header("Rank These 10 Features")
-st.info(
-    "**What are these?** Each of the 10 items below represents a specific "
-    "capability area that customers actually talk about in their reviews "
-    "of Jira, Asana, and Trello, things like \"Kanban Board Functionality\" "
-    "or \"Issue Tracking Across Team Workflows.\" They were found by "
-    "running NLP on 738 real customer reviews.\n\n"
-    "**How do I rank them?** Imagine you were the product manager using "
-    "one or more of the above mentioned systems/tools. Based only on the "
-    "name and description of some of the features these tools have, how "
-    "would you rank these features according to their order of importance "
-    "to you?"
-)
+
+with st.container(border=True):
+    st.markdown(
+        "**Your task:** Imagine you are the product manager assigned to "
+        "work on a project management tool like Trello, Asana, or Jira. "
+        "Based on your own judgement, how would you rank the feature "
+        "areas below, from most to least important to focus on?"
+    )
+    st.caption(
+        "Each of the 10 items below is a specific capability area that "
+        "customers actually talk about in their reviews of Jira, Asana, "
+        "and Trello, things like \"Kanban Board Functionality\" or "
+        "\"Issue Tracking Across Team Workflows.\" They were found by "
+        "running NLP on 738 real customer reviews."
+    )
+
 st.markdown(
     "Give each feature a rank from **1 (highest priority)** to "
-    "**10 (lowest priority)**. Use each number once."
+    "**10 (lowest priority)**. Use each number once. As you assign "
+    "numbers, the order will appear on the right so you can check it."
 )
 
-for _, row in features_df.iterrows():
-    feature_key = row["Feature_Label"]
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        st.markdown(f"**{row['Name']}**")
-        st.caption(row["Description"])
-    with col2:
-        current = st.session_state.your_ranks.get(feature_key, None)
-        val = st.number_input(
-            "Your rank",
-            min_value=1,
-            max_value=N_FEATURES,
-            value=current if current else 1,
-            key=f"rank_{feature_key}",
-            label_visibility="collapsed",
-        )
-        st.session_state.your_ranks[feature_key] = val
+input_col, preview_col = st.columns([2, 1])
+
+with input_col:
+    for _, row in features_df.iterrows():
+        feature_key = row["Feature_Label"]
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.markdown(f"**{row['Name']}**")
+            st.caption(row["Description"])
+        with col2:
+            current = st.session_state.your_ranks.get(feature_key, None)
+            val = st.number_input(
+                "Your rank",
+                min_value=1,
+                max_value=N_FEATURES,
+                value=current if current else 1,
+                key=f"rank_{feature_key}",
+                label_visibility="collapsed",
+            )
+            st.session_state.your_ranks[feature_key] = val
 
 your_rank_values = list(st.session_state.your_ranks.values())
 duplicates = len(your_rank_values) != len(set(your_rank_values))
 all_filled = len(st.session_state.your_ranks) == N_FEATURES
+
+with preview_col:
+    st.markdown("**Your current order**")
+    if st.session_state.your_ranks:
+        preview_df = features_df.copy()
+        preview_df["Your Rank"] = preview_df["Feature_Label"].map(st.session_state.your_ranks)
+        preview_df = preview_df.dropna(subset=["Your Rank"]).sort_values("Your Rank")
+        for _, r in preview_df.iterrows():
+            st.markdown(
+                f'<div class="feature-card" style="padding:0.5rem 0.8rem;margin-bottom:0.4rem;">'
+                f'<b>#{int(r["Your Rank"])}</b> {r["Name"]}</div>',
+                unsafe_allow_html=True,
+            )
+    else:
+        st.caption("Start ranking to see your order build here.")
 
 if duplicates:
     st.error("You've used the same number more than once. Please make sure each rank from 1 to 10 is used exactly once.")
@@ -302,11 +330,19 @@ else:
 
 st.markdown("---")
 st.markdown('<div class="step-badge">STEP 2</div>', unsafe_allow_html=True)
-st.header("Compare Your Ranking to the System's")
+st.header("Compare Your Ranking to the System's Suggestion")
 
 if duplicates or not all_filled:
     st.warning("Finish Step 1 with no duplicate numbers to see the comparison.")
 else:
+    st.info(
+        "**What this step is for:** you already gave your own ranking based "
+        "purely on your judgement. Below, you'll see the system's "
+        "suggested ranking next to yours, so you can see where you agree "
+        "or differ. This isn't a test of who's \"right\", it's the actual "
+        "comparison this research is trying to capture."
+    )
+
     compare_df = features_df.copy()
     compare_df["Your_Rank"] = compare_df["Feature_Label"].map(st.session_state.your_ranks)
     compare_df = compare_df.sort_values("Your_Rank")
@@ -323,20 +359,20 @@ else:
     compare_df["Match"] = compare_df["Gap"].map(match_label)
 
     display_table = compare_df[["Your_Rank", "AI_Rank", "Name", "Match"]].rename(
-        columns={"Your_Rank": "Your Rank", "AI_Rank": "System Rank", "Name": "Feature"}
+        columns={"Your_Rank": "Your Rank", "AI_Rank": "Suggestion", "Name": "Feature"}
     )
     st.dataframe(
         display_table.style.background_gradient(
-            subset=["Your Rank", "System Rank"], cmap="Purples", vmin=1, vmax=N_FEATURES
+            subset=["Your Rank", "Suggestion"], cmap="Purples", vmin=1, vmax=N_FEATURES
         ),
         use_container_width=True,
         hide_index=True,
     )
 
-    st.markdown("**Want to see why the system ranked things this way?**")
+    st.markdown("**Want to see why the system suggested this ranking?**")
     for _, row in compare_df.iterrows():
         topic_id = int(row["Topic"])
-        with st.expander(f"{row['Name']}: system said #{int(row['AI_Rank'])}, you said #{int(row['Your_Rank'])}"):
+        with st.expander(f"{row['Name']}: system suggested #{int(row['AI_Rank'])}, you said #{int(row['Your_Rank'])}"):
             st.write(
                 f"**CPS score: {row['CPS']:.2f}** out of 1.00, made up of "
                 f"Frequency {row['Frequency_Score']:.2f}, Sentiment "
@@ -379,9 +415,14 @@ st.session_state.reflection["biggest_difference"] = st.text_area(
 st.markdown("---")
 st.markdown('<div class="step-badge">STEP 4</div>', unsafe_allow_html=True)
 st.header("Quick Usability Survey")
-st.markdown(
-    "These questions are about **your experience using this tool**, not "
-    "about the features themselves. There are no right or wrong answers."
+st.info(
+    "**What is this section?** You've now ranked features and compared "
+    "your ranking to the system's. This last section is different: it "
+    "asks about **your experience using this tool itself** (was it clear, "
+    "was it easy to work through), not about the features or rankings. "
+    "It uses a standard research questionnaire called the SUS (System "
+    "Usability Scale), 10 short statements, and you say how much you "
+    "agree with each one, from 1 to 5. There are no right or wrong answers."
 )
 
 sus_items = [
@@ -396,17 +437,23 @@ sus_items = [
     "I felt very confident using the system.",
     "I needed to learn a lot of things before I could get going with this system.",
 ]
-scale_labels = ["1 - Strongly disagree", "2", "3", "4", "5 - Strongly agree"]
 
 for i, item in enumerate(sus_items):
-    st.session_state.sus_answers[i] = st.radio(
-        f"{i + 1}. {item}",
-        options=[1, 2, 3, 4, 5],
-        format_func=lambda x: scale_labels[x - 1],
-        horizontal=True,
-        key=f"sus_{i}",
-        index=None,
-    )
+    st.markdown(f"**{i + 1}. {item}**")
+    label_col, radio_col, label_col2 = st.columns([2, 4, 2])
+    with label_col:
+        st.caption("Strongly disagree")
+    with radio_col:
+        st.session_state.sus_answers[i] = st.radio(
+            f"sus_scale_{i}",
+            options=[1, 2, 3, 4, 5],
+            horizontal=True,
+            key=f"sus_{i}",
+            index=None,
+            label_visibility="collapsed",
+        )
+    with label_col2:
+        st.caption("Strongly agree")
 
 
 def compute_sus_score(answers):
@@ -511,10 +558,12 @@ if st.button("Submit my results", type="primary"):
                 f"the system ranked it #{int(biggest_gap_row['AI_Rank'])}."
             )
             st.markdown(
-                "**Why this matters:** the goal of this research is to test whether a tool "
-                "like this can genuinely help product teams turn large volumes of customer "
-                "feedback into decisions, without replacing the judgement a person like you "
-                "brings. Your ranking, and where it agreed or disagreed with the system, is "
-                "exactly the evidence needed to answer that. Whether you matched the system "
-                "closely or not, both outcomes are useful. Thank you for your time."
+                "**Why this matters:** this research is testing whether a tool "
+                "like this can genuinely help product teams turn large volumes "
+                "of customer feedback into decisions, as a complement to expert "
+                "judgement rather than a replacement for it. Your ranking, and "
+                "where it agreed or disagreed with the system's, is exactly the "
+                "evidence this study needs. Whether your ranking matched the "
+                "system closely or not, both outcomes are equally useful. "
+                "Thank you for participating."
             )
