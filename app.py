@@ -18,6 +18,68 @@ from email import encoders
 
 st.set_page_config(page_title="Clearvion", layout="wide", page_icon="🎯")
 
+st.markdown("""
+<style>
+    .stApp {
+        background: linear-gradient(180deg, #F4F5FB 0%, #FFFFFF 250px);
+    }
+    .hero-banner {
+        background: linear-gradient(120deg, #6366F1 0%, #8B5CF6 50%, #EC4899 100%);
+        border-radius: 20px;
+        padding: 2rem 2.2rem;
+        color: white;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 8px 24px rgba(99, 102, 241, 0.25);
+    }
+    .hero-banner h1 {
+        color: white !important;
+        font-size: 1.9rem;
+        margin-bottom: 0.4rem;
+    }
+    .hero-banner p {
+        color: rgba(255,255,255,0.92);
+        font-size: 1.05rem;
+        margin: 0;
+    }
+    .step-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.6rem;
+        background: linear-gradient(120deg, #6366F1, #8B5CF6);
+        color: white;
+        padding: 0.35rem 1rem;
+        border-radius: 999px;
+        font-weight: 600;
+        font-size: 0.95rem;
+        margin-bottom: 0.6rem;
+    }
+    .feature-card {
+        background: white;
+        border: 1px solid #E9E9F5;
+        border-radius: 14px;
+        padding: 1rem 1.2rem;
+        margin-bottom: 0.7rem;
+        box-shadow: 0 2px 8px rgba(30, 27, 46, 0.04);
+    }
+    div[data-testid="stExpander"] {
+        border-radius: 12px;
+        border: 1px solid #E9E9F5;
+    }
+    .stButton > button[kind="primary"] {
+        background: linear-gradient(120deg, #6366F1, #8B5CF6);
+        border: none;
+        border-radius: 10px;
+        font-weight: 600;
+        padding: 0.6rem 1.6rem;
+    }
+    div[data-testid="stMetric"] {
+        background: #F4F5FB;
+        border-radius: 12px;
+        padding: 0.8rem;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 DATA_DIR = "data"
 
 # The 10 features shown to participants. Chosen from all 21 topics found by
@@ -156,10 +218,13 @@ with st.sidebar.expander("Advanced (optional): filter evidence by product"):
 # ----------------------------- Intro -----------------------------
 
 st.markdown(
-    "## 🎯 What this tool does\n"
-    "**It helps decide which product features to build next, by comparing "
-    "your judgement against a system that ranked features based on real "
-    "customer reviews.**"
+    """
+    <div class="hero-banner">
+    <h1>🎯 What this tool does</h1>
+    <p><b>It helps decide which product features to build next</b>, by comparing your judgement against a system that ranked features based on real customer reviews.</p>
+    </div>
+    """,
+    unsafe_allow_html=True,
 )
 
 with st.container(border=True):
@@ -184,7 +249,8 @@ with st.container(border=True):
 # ----------------------------- Step 1: Rank the features -----------------------------
 
 st.markdown("---")
-st.header("Step 1: Rank These 10 Features")
+st.markdown('<div class="step-badge">STEP 1</div>', unsafe_allow_html=True)
+st.header("Rank These 10 Features")
 st.markdown(
     "Based only on the name and description below, give each feature a "
     "rank from **1 (highest priority)** to **10 (lowest priority)**. Use "
@@ -224,7 +290,8 @@ else:
 # ----------------------------- Step 2: Compare -----------------------------
 
 st.markdown("---")
-st.header("Step 2: Compare Your Ranking to the System's")
+st.markdown('<div class="step-badge">STEP 2</div>', unsafe_allow_html=True)
+st.header("Compare Your Ranking to the System's")
 
 if duplicates or not all_filled:
     st.warning("Finish Step 1 with no duplicate numbers to see the comparison.")
@@ -232,10 +299,24 @@ else:
     compare_df = features_df.copy()
     compare_df["Your_Rank"] = compare_df["Feature_Label"].map(st.session_state.your_ranks)
     compare_df = compare_df.sort_values("Your_Rank")
+    compare_df["Gap"] = (compare_df["Your_Rank"] - compare_df["AI_Rank"]).abs()
 
+    def match_label(gap):
+        if gap == 0:
+            return "🟢 Exact match"
+        elif gap <= 2:
+            return "🟡 Close"
+        else:
+            return "🔴 Far apart"
+
+    compare_df["Match"] = compare_df["Gap"].map(match_label)
+
+    display_table = compare_df[["Your_Rank", "AI_Rank", "Name", "Match"]].rename(
+        columns={"Your_Rank": "Your Rank", "AI_Rank": "System Rank", "Name": "Feature"}
+    )
     st.dataframe(
-        compare_df[["Your_Rank", "AI_Rank", "Name"]].rename(
-            columns={"Your_Rank": "Your Rank", "AI_Rank": "System Rank", "Name": "Feature"}
+        display_table.style.background_gradient(
+            subset=["Your Rank", "System Rank"], cmap="Purples", vmin=1, vmax=N_FEATURES
         ),
         use_container_width=True,
         hide_index=True,
@@ -267,7 +348,8 @@ else:
 # ----------------------------- Step 3: Reflection -----------------------------
 
 st.markdown("---")
-st.header("Step 3: Why Did You Rank Things This Way?")
+st.markdown('<div class="step-badge">STEP 3</div>', unsafe_allow_html=True)
+st.header("Why Did You Rank Things This Way?")
 st.session_state.reflection["reasoning"] = st.text_area(
     "In a few sentences, what did you base your ranking on? (e.g. your own "
     "experience with similar tools, what seemed intuitively important, etc.)",
@@ -284,7 +366,8 @@ st.session_state.reflection["biggest_difference"] = st.text_area(
 # ----------------------------- Step 4: Usability survey -----------------------------
 
 st.markdown("---")
-st.header("Step 4: Quick Usability Survey")
+st.markdown('<div class="step-badge">STEP 4</div>', unsafe_allow_html=True)
+st.header("Quick Usability Survey")
 st.markdown(
     "These questions are about **your experience using this tool**, not "
     "about the features themselves. There are no right or wrong answers."
@@ -331,7 +414,8 @@ def compute_sus_score(answers):
 # ----------------------------- Step 5: Submit -----------------------------
 
 st.markdown("---")
-st.header("Step 5: Submit")
+st.markdown('<div class="step-badge">STEP 5</div>', unsafe_allow_html=True)
+st.header("Submit")
 
 sus_score = compute_sus_score(st.session_state.sus_answers)
 if sus_score is not None:
@@ -393,3 +477,33 @@ if st.button("Submit my results", type="primary"):
         else:
             st.warning("Automatic sending isn't set up yet. Please download and send this file to the researcher.")
             st.download_button("Download my results (CSV)", data=csv_bytes, file_name=fname, mime="text/csv")
+
+        exact_matches = sum(
+            1 for _, r in out.iterrows() if int(r["Your_Rank"]) == int(r["AI_Rank"])
+        )
+        close_matches = sum(
+            1 for _, r in out.iterrows() if abs(int(r["Your_Rank"]) - int(r["AI_Rank"])) <= 2
+        )
+        biggest_gap_row = out.loc[
+            (out["Your_Rank"] - out["AI_Rank"]).abs().idxmax()
+        ]
+
+        with st.container(border=True):
+            st.markdown("### Here's a quick look at what you just did")
+            st.write(
+                f"You matched the system's rank exactly on **{exact_matches} of {N_FEATURES}** "
+                f"features, and were within 2 places on **{close_matches} of {N_FEATURES}**."
+            )
+            st.write(
+                f"Your biggest disagreement with the system was on "
+                f"**{biggest_gap_row['Name']}**: you ranked it #{int(biggest_gap_row['Your_Rank'])}, "
+                f"the system ranked it #{int(biggest_gap_row['AI_Rank'])}."
+            )
+            st.markdown(
+                "**Why this matters:** the goal of this research is to test whether a tool "
+                "like this can genuinely help product teams turn large volumes of customer "
+                "feedback into decisions, without replacing the judgement a person like you "
+                "brings. Your ranking, and where it agreed or disagreed with the system, is "
+                "exactly the evidence needed to answer that. Whether you matched the system "
+                "closely or not, both outcomes are useful. Thank you for your time."
+            )
